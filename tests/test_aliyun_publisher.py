@@ -84,6 +84,53 @@ def test_get_download_url_default_expiration(monkeypatch):
     assert expiration > 0
 
 
+def test_download_file_writes_to_save_dir(monkeypatch, tmp_path):
+    client = MagicMock()
+    publisher = _publisher(monkeypatch, client)
+
+    assert publisher.download_file("a/b", "1.0.0", save_dir=str(tmp_path)) is True
+
+    client.download.assert_called_once_with("a/b", "1.0.0", str(tmp_path / "b"))
+
+
+def test_download_file_rejects_existing_destination(monkeypatch, tmp_path):
+    client = MagicMock()
+    publisher = _publisher(monkeypatch, client)
+    destination = tmp_path / "b"
+    destination.write_bytes(b"old")
+
+    with pytest.raises(FileExistsError):
+        publisher.download_file("a/b", "1.0.0", filepath=str(destination))
+    client.download.assert_not_called()
+
+
+def test_exist_delegates_to_client(monkeypatch):
+    client = MagicMock()
+    client.exist.return_value = True
+    publisher = _publisher(monkeypatch, client)
+
+    assert publisher.exist("a/b", "1.0.0") is True
+    client.exist.assert_called_once_with("a/b", "1.0.0")
+
+
+def test_get_download_url_uses_explicit_expiration(monkeypatch):
+    client = MagicMock()
+    client.get_signed_download_url.return_value = "https://signed"
+    publisher = _publisher(monkeypatch, client)
+
+    assert publisher.get_download_url("a/b", "1.0.0", expiration=123) == "https://signed"
+    client.get_signed_download_url.assert_called_once_with("a/b", "1.0.0", 123)
+
+
+def test_close_closes_client(monkeypatch):
+    client = MagicMock()
+    publisher = _publisher(monkeypatch, client)
+
+    publisher.close()
+
+    client.close.assert_called_once_with()
+
+
 def test_credentials_looked_up_by_repo_type_and_repo_name(monkeypatch):
     monkeypatch.setattr(
         "funpub.channels.aliyun.publisher.AliyunClient", lambda **kwargs: MagicMock()

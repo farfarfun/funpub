@@ -3,7 +3,7 @@
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 import typer
 from farlog import configure
@@ -19,18 +19,18 @@ app = typer.Typer(help="funpub 多渠道制品发布命令行工具")
 
 @app.callback()
 def main() -> None:
-    """funpub command group."""
+    """funpub 命令组。"""
     configure()
 
 
 def _build_publisher(
     channel: str,
-    repo_name: Optional[str],
+    repo_name: str | None,
     repo_type: str,
-    repo_url: Optional[str],
-    username: Optional[str],
-    password: Optional[str],
-):
+    repo_url: str | None,
+    username: str | None,
+    password: str | None,
+) -> Any:
     kwargs = {}
     if repo_name:
         kwargs["repo_name"] = repo_name
@@ -72,14 +72,14 @@ def upload(
     path: str = typer.Argument(..., help="远端制品路径"),
     version: str = typer.Option(..., "--version", "-v", help="制品版本号"),
     channel: str = ChannelOption,
-    filename: Optional[str] = typer.Option(None, help="制品名称，默认取本地文件名"),
-    description: Optional[str] = typer.Option(None, help="版本描述"),
+    filename: str | None = typer.Option(None, help="制品名称，默认取本地文件名"),
+    description: str | None = typer.Option(None, help="版本描述"),
     overwrite: bool = typer.Option(False, help="是否覆盖已存在的同版本制品"),
-    repo_name: Optional[str] = RepoNameOption,
+    repo_name: str | None = RepoNameOption,
     repo_type: str = RepoTypeOption,
-    repo_url: Optional[str] = RepoUrlOption,
-    username: Optional[str] = UsernameOption,
-    password: Optional[str] = PasswordOption,
+    repo_url: str | None = RepoUrlOption,
+    username: str | None = UsernameOption,
+    password: str | None = PasswordOption,
 ) -> None:
     """上传制品文件"""
     publisher = _build_publisher(
@@ -103,11 +103,11 @@ def download(
     output: Path = typer.Option(Path("."), "--output", "-o", help="保存目录或文件路径"),
     channel: str = ChannelOption,
     overwrite: bool = typer.Option(False, help="是否覆盖已存在的本地文件"),
-    repo_name: Optional[str] = RepoNameOption,
+    repo_name: str | None = RepoNameOption,
     repo_type: str = RepoTypeOption,
-    repo_url: Optional[str] = RepoUrlOption,
-    username: Optional[str] = UsernameOption,
-    password: Optional[str] = PasswordOption,
+    repo_url: str | None = RepoUrlOption,
+    username: str | None = UsernameOption,
+    password: str | None = PasswordOption,
 ) -> None:
     """下载制品文件"""
     publisher = _build_publisher(
@@ -130,11 +130,11 @@ def sign_url(
     version: str = typer.Option(..., "--version", "-v", help="制品版本号"),
     expiration_seconds: int = typer.Option(3600, help="有效期（秒）"),
     channel: str = ChannelOption,
-    repo_name: Optional[str] = RepoNameOption,
+    repo_name: str | None = RepoNameOption,
     repo_type: str = RepoTypeOption,
-    repo_url: Optional[str] = RepoUrlOption,
-    username: Optional[str] = UsernameOption,
-    password: Optional[str] = PasswordOption,
+    repo_url: str | None = RepoUrlOption,
+    username: str | None = UsernameOption,
+    password: str | None = PasswordOption,
 ) -> None:
     """生成临时免密下载地址"""
     publisher = _build_publisher(

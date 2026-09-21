@@ -2,7 +2,7 @@
 
 多渠道制品发布工具。通过统一接口向不同的制品仓库上传/下载文件，当前支持：
 
-- **aliyun** — 阿里云 Packages generic 仓库（协议细节见 `docs/aliyun/common/`）
+- **aliyun** — 阿里云 Packages generic 仓库（协议细节见 `docs/aliyun/generic/`）
 
 新渠道的接入方式见下方「新增渠道」。
 
@@ -101,3 +101,16 @@ uv sync
 uv run pytest
 uv run ruff check .
 ```
+
+---
+
+## 关于 farfarfun
+
+[farfarfun](https://github.com/farfarfun) 是一个专注于实用工具库的开源组织，
+涵盖云存储、数据处理、AI、多媒体与开发工具链等方向。
+
+- 🏠 组织主页：<https://github.com/farfarfun>
+- 📦 PyPI：<https://pypi.org/user/niuliangtao/>
+- 📧 联系：farfarfun@qq.com
+
+本项目基于 [MIT](LICENSE) 协议开源。

@@ -86,6 +86,23 @@ def test_exist_true_false(monkeypatch):
     assert client.exist("a/b", "1.0.0") is False
 
 
+def test_download_writes_streamed_response(monkeypatch, tmp_path):
+    session = MagicMock()
+    response = MagicMock(status_code=200)
+    response.__enter__.return_value = response
+    response.iter_content.return_value = [b"hello", b"", b"world"]
+    session.get.return_value = response
+    client = _client(monkeypatch, session)
+
+    destination = tmp_path / "download.bin"
+    client.download("a/b", "1.0.0", str(destination))
+
+    assert destination.read_bytes() == b"helloworld"
+    session.get.assert_called_once_with(
+        f"{REPO_URL}/files/a/b", params={"version": "1.0.0"}, stream=True
+    )
+
+
 def test_signed_url(monkeypatch):
     session = MagicMock()
     resp = MagicMock(

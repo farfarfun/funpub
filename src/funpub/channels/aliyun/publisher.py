@@ -2,7 +2,7 @@
 
 import os
 import time
-from typing import Any, Optional
+from typing import Any
 
 from farlog import getLogger
 from funsecret import read_secret
@@ -43,7 +43,7 @@ class AliyunPublisher(BasePublisher):
         get_publisher("aliyun", repo_name="funpackage")
 
     凭证解析顺序：构造参数 > funsecret（按 repo_name/repo_type 查找）。
-    底层协议细节参见 ``docs/aliyun/common/`` 下的官方文档。
+    底层协议细节参见 ``docs/aliyun/generic/`` 下的官方文档。
 
     Args:
         repo_name: 仓库名称，用于从 funsecret 中查找该仓库的 repo_url/
@@ -60,20 +60,20 @@ class AliyunPublisher(BasePublisher):
 
     def __init__(
         self,
-        repo_name: Optional[str] = None,
+        repo_name: str | None = None,
         repo_type: str = DEFAULT_REPO_TYPE,
-        repo_url: Optional[str] = None,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        repo_url: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
-        chunk_threshold: Optional[int] = None,
+        chunk_threshold: int | None = None,
         timeout: float = 60.0,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
 
-        def _secret(field: str) -> Optional[str]:
+        def _secret(field: str) -> str | None:
             if not repo_name:
                 return None
             return read_secret(
@@ -106,13 +106,14 @@ class AliyunPublisher(BasePublisher):
         filepath: str,
         path: str,
         version: str,
-        filename: Optional[str] = None,
-        description: Optional[str] = None,
+        filename: str | None = None,
+        description: str | None = None,
         overwrite: bool = False,
-        chunked: Optional[bool] = None,
+        chunked: bool | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> PublishResult:
+        """上传制品文件并返回统一格式的结果。"""
         if not os.path.isfile(filepath):
             raise FileNotFoundError(filepath)
 
@@ -160,13 +161,14 @@ class AliyunPublisher(BasePublisher):
         self,
         path: str,
         version: str,
-        save_dir: Optional[str] = None,
-        filename: Optional[str] = None,
-        filepath: Optional[str] = None,
+        save_dir: str | None = None,
+        filename: str | None = None,
+        filepath: str | None = None,
         overwrite: bool = False,
         *args: Any,
         **kwargs: Any,
     ) -> bool:
+        """下载制品到本地，目标已存在时默认拒绝覆盖。"""
         dest = get_filepath(
             filedir=save_dir,
             filename=filename or os.path.basename(path),
@@ -180,16 +182,18 @@ class AliyunPublisher(BasePublisher):
         return True
 
     def exist(self, path: str, version: str, *args: Any, **kwargs: Any) -> bool:
+        """检查远端制品版本是否存在。"""
         return self.client.exist(path, version)
 
     def get_download_url(
         self,
         path: str,
         version: str,
-        expiration: Optional[int] = None,
+        expiration: int | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> str:
+        """生成临时免密下载地址，默认有效期为一小时。"""
         if expiration is None:
             expiration = int((time.time() + 3600) * 1000)
         return self.client.get_signed_download_url(path, version, expiration)

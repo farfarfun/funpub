@@ -2,13 +2,13 @@
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 def get_filepath(
-    filedir: Optional[str] = None,
-    filename: Optional[str] = None,
-    filepath: Optional[str] = None,
+    filedir: str | None = None,
+    filename: str | None = None,
+    filepath: str | None = None,
 ) -> str:
     """根据 (filedir, filename) 或 filepath 计算出完整的本地文件路径"""
     if filepath:
@@ -38,13 +38,13 @@ class PublishResult(dict):
         self,
         path: str,
         version: str,
-        url: Optional[str] = None,
-        size: Optional[int] = None,
-        md5: Optional[str] = None,
-        sha1: Optional[str] = None,
-        sha256: Optional[str] = None,
-        filename: Optional[str] = None,
-        ext: Optional[Dict[str, Any]] = None,
+        url: str | None = None,
+        size: int | None = None,
+        md5: str | None = None,
+        sha1: str | None = None,
+        sha256: str | None = None,
+        filename: str | None = None,
+        ext: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         base = {
@@ -95,8 +95,8 @@ class BasePublisher:
         filepath: str,
         path: str,
         version: str,
-        filename: Optional[str] = None,
-        description: Optional[str] = None,
+        filename: str | None = None,
+        description: str | None = None,
         overwrite: bool = False,
         *args: Any,
         **kwargs: Any,
@@ -121,9 +121,9 @@ class BasePublisher:
         self,
         path: str,
         version: str,
-        save_dir: Optional[str] = None,
-        filename: Optional[str] = None,
-        filepath: Optional[str] = None,
+        save_dir: str | None = None,
+        filename: str | None = None,
+        filepath: str | None = None,
         overwrite: bool = False,
         *args: Any,
         **kwargs: Any,
@@ -139,7 +139,7 @@ class BasePublisher:
         self,
         path: str,
         version: str,
-        expiration: Optional[int] = None,
+        expiration: int | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> str:

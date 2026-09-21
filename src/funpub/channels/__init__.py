@@ -11,7 +11,7 @@ funpub 发布渠道注册表
 """
 
 import importlib
-from typing import Any, Dict, NamedTuple, Optional, Type
+from typing import Any, NamedTuple
 
 from funpub.core.exceptions import ChannelNotFoundError
 
@@ -25,10 +25,10 @@ class ChannelSpec(NamedTuple):
     cls: str
     """模块中导出的 Publisher 类名。"""
 
-    extra: Optional[str] = None
+    extra: str | None = None
     """安装该渠道所需的 pip extra；``None`` 表示只依赖核心依赖。"""
 
-    pip_target: Optional[str] = None
+    pip_target: str | None = None
     """``pip install`` 的目标覆写；默认是 ``funpub[<extra>]``。"""
 
     @property
@@ -41,14 +41,14 @@ class ChannelSpec(NamedTuple):
 
 
 # 渠道注册表 —— 唯一的事实来源（渠道 key -> 模块/类名/pip extra）。
-CHANNEL_SPECS: Dict[str, ChannelSpec] = {
+CHANNEL_SPECS: dict[str, ChannelSpec] = {
     "aliyun": ChannelSpec(".aliyun", "AliyunPublisher"),
 }
 
-_resolved: Dict[str, Type[Any]] = {}
+_resolved: dict[str, type[Any]] = {}
 
 
-def _load(spec: ChannelSpec) -> Type[Any]:
+def _load(spec: ChannelSpec) -> type[Any]:
     """导入并返回渠道的 Publisher 类。
 
     Raises:
@@ -110,9 +110,9 @@ def get_publisher(channel: str, *args: Any, **kwargs: Any) -> Any:
     return _load(spec)(*args, **kwargs)
 
 
-def list_available_channels() -> Dict[str, Type[Any]]:
+def list_available_channels() -> dict[str, type[Any]]:
     """列出当前环境中依赖已装好、可以直接实例化的渠道"""
-    result: Dict[str, Type[Any]] = {}
+    result: dict[str, type[Any]] = {}
     for key, spec in CHANNEL_SPECS.items():
         try:
             result[key] = _load(spec)
@@ -121,9 +121,9 @@ def list_available_channels() -> Dict[str, Type[Any]]:
     return result
 
 
-def list_missing_channels() -> Dict[str, str]:
+def list_missing_channels() -> dict[str, str]:
     """列出依赖缺失的渠道及其安装命令"""
-    missing: Dict[str, str] = {}
+    missing: dict[str, str] = {}
     for key, spec in CHANNEL_SPECS.items():
         try:
             _load(spec)

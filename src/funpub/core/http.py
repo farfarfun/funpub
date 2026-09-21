@@ -4,7 +4,6 @@
 而不是各写各的 ``requests`` 用法。
 """
 
-from typing import Optional
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -40,7 +39,7 @@ def new_session(
     retries: int = DEFAULT_MAX_RETRIES,
     backoff_factor: float = DEFAULT_RETRY_DELAY,
     pool_size: int = DEFAULT_POOL_SIZE,
-    headers: Optional[dict] = None,
+    headers: dict | None = None,
 ) -> TimeoutSession:
     """构造一个带默认超时、幂等请求自动重试、连接池的会话。
 

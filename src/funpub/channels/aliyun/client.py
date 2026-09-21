@@ -2,8 +2,8 @@
 
 覆盖官方文档描述的两套能力：
 
-* 单次 API 上传/下载/免密下载地址（见 ``docs/aliyun/common/API上传.md``）。
-* 大文件分块上传（见 ``docs/aliyun/common/大文件上传.md``）。协议细节文档
+* 单次 API 上传/下载/免密下载地址（见 ``docs/aliyun/generic/API上传.md``）。
+* 大文件分块上传（见 ``docs/aliyun/generic/大文件上传.md``）。协议细节文档
   中没有给出，是从官方 ``chunk_upload.py`` 脚本逆向出来的：创建上传会话
   -> PATCH 分块 -> 触发异步合并 -> 轮询合并状态 -> 将 blob 关联到仓库路径。
 """
@@ -13,7 +13,7 @@ import os
 import re
 import time
 from base64 import b64encode
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 from urllib.parse import quote
 
 from farlog import getLogger
@@ -106,11 +106,11 @@ class AliyunClient:
         filepath: str,
         path: str,
         version: str,
-        filename: Optional[str] = None,
-        description: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        filename: str | None = None,
+        description: str | None = None,
+    ) -> dict[str, Any]:
         """一次性上传整个文件，返回响应中的 ``object`` 字段"""
-        params: Dict[str, str] = {"version": version}
+        params: dict[str, str] = {"version": version}
         if filename:
             params["fileName"] = filename
         if description:
@@ -174,12 +174,12 @@ class AliyunClient:
         filepath: str,
         path: str,
         version: str,
-        filename: Optional[str] = None,
-        description: Optional[str] = None,
+        filename: str | None = None,
+        description: str | None = None,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
         poll_interval: float = DEFAULT_MERGE_POLL_INTERVAL,
         poll_timeout: float = DEFAULT_MERGE_TIMEOUT,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """分块上传大文件：创建会话 -> 分块 PATCH -> 异步合并 -> 轮询 -> 关联仓库"""
         file_size = os.path.getsize(filepath)
         file_md5 = _file_md5(filepath)
@@ -197,7 +197,7 @@ class AliyunClient:
             f"/GENERIC/repos/{self.repo_id}/blobs/uploads{suffix}"
         )
 
-    def _start_blob_upload(self) -> Tuple[str, str]:
+    def _start_blob_upload(self) -> tuple[str, str]:
         resp = self._session.post(
             self._blob_uploads_url(), headers={"Content-Length": "0"}
         )
@@ -300,11 +300,11 @@ class AliyunClient:
         self,
         path: str,
         version: str,
-        filename: Optional[str],
-        description: Optional[str],
+        filename: str | None,
+        description: str | None,
         file_md5: str,
-    ) -> Dict[str, Any]:
-        params: Dict[str, str] = {"version": version}
+    ) -> dict[str, Any]:
+        params: dict[str, str] = {"version": version}
         if filename:
             params["fileName"] = filename
         if description:
@@ -326,7 +326,7 @@ class AliyunClient:
         return obj
 
     @staticmethod
-    def _safe_json(resp: Any) -> Dict[str, Any]:
+    def _safe_json(resp: Any) -> dict[str, Any]:
         try:
             return resp.json()
         except ValueError:

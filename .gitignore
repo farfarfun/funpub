@@ -1,12 +1,17 @@
 __pycache__/
 *.pyc
 *.egg-info
-build
-dist
+*.db
+*.rar
+build/
+dist/
 .cache
-.venv
-logs
-uv.lock
+.venv/
+logs/
+.run/
+.idea/
+.vscode/
+node_modules/
 
 # ---- AI 编码助手 ----
 # 只忽略本地状态；团队有意共享的 agent / 命令 / 规则定义仍然版本化。
