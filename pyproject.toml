@@ -1,6 +1,6 @@
 [project]
 name = "funpub"
-version = "0.1.5"
+version = "0.1.6"
 description = "多渠道制品发布工具"
 readme = "README.md"
 requires-python = ">=3.10"
