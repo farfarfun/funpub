@@ -118,7 +118,9 @@ def test_get_download_url_uses_explicit_expiration(monkeypatch):
     client.get_signed_download_url.return_value = "https://signed"
     publisher = _publisher(monkeypatch, client)
 
-    assert publisher.get_download_url("a/b", "1.0.0", expiration=123) == "https://signed"
+    assert (
+        publisher.get_download_url("a/b", "1.0.0", expiration=123) == "https://signed"
+    )
     client.get_signed_download_url.assert_called_once_with("a/b", "1.0.0", 123)
 
 

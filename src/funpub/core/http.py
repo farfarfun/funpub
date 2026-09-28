@@ -4,7 +4,6 @@
 而不是各写各的 ``requests`` 用法。
 """
 
-
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry

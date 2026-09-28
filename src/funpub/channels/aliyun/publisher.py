@@ -49,8 +49,10 @@ class AliyunPublisher(BasePublisher):
         repo_name: 仓库名称，用于从 funsecret 中查找该仓库的 repo_url/
             username/password（配合 repo_type 一起作为查找的 key）
         repo_type: 仓库类型，默认 ``generic``
-        repo_url: 仓库地址，形如
-            ``https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo}``；
+        repo_url: 仓库地址，支持两种格式：经典格式
+            ``https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo}``，
+            或专属域名格式
+            ``https://{组织标识}-{地域标识}.devops.aliyuncs.com/packages/api/protocol/{repo_type}/{repo}``；
             不传则按 repo_name/repo_type 从 funsecret 读取
         username: 认证用户名，不传则按 repo_name/repo_type 从 funsecret 读取
         password: 认证密码，不传则按 repo_name/repo_type 从 funsecret 读取

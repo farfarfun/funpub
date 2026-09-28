@@ -33,8 +33,16 @@ DEFAULT_CHUNK_SIZE = 100 * 1024 * 1024  # 100MB，与官方脚本默认值保持
 DEFAULT_MERGE_POLL_INTERVAL = 3.0  # 秒
 DEFAULT_MERGE_TIMEOUT = 20 * 60.0  # 秒
 
-# repo_url 形如 https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo}
-_REPO_URL_RE = re.compile(r"^https?://([^/]+)/api/protocol/([^/]+)/[^/]+/([^/?]+)")
+# repo_url 支持两种格式：
+# 1. 经典格式: https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo}
+# 2. 专属域名格式: https://{组织标识}-{地域标识}.devops.aliyuncs.com/packages/api/protocol/{repo_type}/{repo}
+#    专属域名格式下 URL 中不单独出现 org_id，blob 上传 API 的 org_id/repo_id 均取 repo 段。
+_REPO_URL_RE_CLASSIC = re.compile(
+    r"^https?://([^/]+)/api/protocol/([^/]+)/[^/]+/([^/?]+)"
+)
+_REPO_URL_RE_DEVOPS = re.compile(
+    r"^https?://([^/]+\.devops\.aliyuncs\.com)/packages/api/protocol/[^/]+/([^/?]+)"
+)
 
 
 def _basic_auth_header(username: str, password: str) -> str:
@@ -72,13 +80,19 @@ class AliyunClient:
         self.username = username
         self.password = password
 
-        match = _REPO_URL_RE.match(self.repo_url)
-        if not match:
+        classic_match = _REPO_URL_RE_CLASSIC.match(self.repo_url)
+        devops_match = _REPO_URL_RE_DEVOPS.match(self.repo_url)
+        if classic_match:
+            self.host, self.org_id, self.repo_id = classic_match.groups()
+        elif devops_match:
+            self.host, self.repo_id = devops_match.groups()
+            self.org_id = self.repo_id
+        else:
             raise PublishError(
                 f"无法解析 repo_url: {repo_url!r}，期望形如 "
-                "https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo}"
+                "https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo} 或 "
+                "https://{组织标识}-{地域标识}.devops.aliyuncs.com/packages/api/protocol/{repo_type}/{repo}"
             )
-        self.host, self.org_id, self.repo_id = match.groups()
 
         self._session = new_session(
             timeout=timeout,

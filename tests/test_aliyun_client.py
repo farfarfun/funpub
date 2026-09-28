@@ -10,19 +10,30 @@ from funpub.core.exceptions import (
 )
 
 REPO_URL = "https://packages.aliyun.com/api/protocol/5fc5eb115dbd287006145e5f/generic/funpackage"
+DEVOPS_REPO_URL = (
+    "https://farfarfun-cn-hangzhou.devops.aliyuncs.com"
+    "/packages/api/protocol/generic/funpackage"
+)
 
 
-def _client(monkeypatch, session):
+def _client(monkeypatch, session, repo_url=REPO_URL):
     monkeypatch.setattr(
         "funpub.channels.aliyun.client.new_session", lambda **kwargs: session
     )
-    return AliyunClient(repo_url=REPO_URL, username="u", password="p")
+    return AliyunClient(repo_url=repo_url, username="u", password="p")
 
 
 def test_repo_url_parsing(monkeypatch):
     client = _client(monkeypatch, MagicMock())
     assert client.host == "packages.aliyun.com"
     assert client.org_id == "5fc5eb115dbd287006145e5f"
+    assert client.repo_id == "funpackage"
+
+
+def test_devops_repo_url_parsing(monkeypatch):
+    client = _client(monkeypatch, MagicMock(), repo_url=DEVOPS_REPO_URL)
+    assert client.host == "farfarfun-cn-hangzhou.devops.aliyuncs.com"
+    assert client.org_id == "funpackage"
     assert client.repo_id == "funpackage"
 
 
