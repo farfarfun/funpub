@@ -42,14 +42,7 @@ funpub sign-url path/to/app --version 1.0.0 \
 funpub channels
 ```
 
-也可以不经 funsecret，直接用 `--repo-url`/`--username`/`--password` 传入：
-
-```bash
-funpub upload ./dist/app-1.0.0.tar.gz path/to/app \
-  --version 1.0.0 \
-  --repo-url https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo} \
-  --username {username} --password {password}
-```
+CLI 不接受密码参数，认证信息统一通过 `funsecret` 按仓库名称读取，避免凭据进入 shell 历史和进程列表。
 
 ## Python 用法
 
@@ -59,7 +52,7 @@ from funpub import get_publisher
 # 方式一：仓库信息已通过 funsecret 配置过，只需要传 repo_name
 publisher = get_publisher("aliyun", repo_name="{repo_name}")
 
-# 方式二：直接传 repo_url/username/password，不依赖 funsecret
+# 方式二：在代码中直接传入配置（不适用于 CLI）
 publisher = get_publisher(
     "aliyun",
     repo_url="https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo}",

@@ -1,4 +1,11 @@
-"""funpub：多渠道制品发布工具"""
+"""funpub：多渠道制品发布工具。"""
+
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("funpub")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 
 from funpub.channels import (
     get_publisher,
@@ -7,7 +14,6 @@ from funpub.channels import (
 )
 from funpub.core import BasePublisher, PublishResult
 
-__version__ = "0.1.0"
 
 __all__ = [
     "get_publisher",

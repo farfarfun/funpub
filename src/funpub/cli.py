@@ -28,8 +28,6 @@ def _build_publisher(
     repo_name: str | None,
     repo_type: str,
     repo_url: str | None,
-    username: str | None,
-    password: str | None,
 ) -> Any:
     kwargs = {}
     if repo_name:
@@ -37,10 +35,6 @@ def _build_publisher(
         kwargs["repo_type"] = repo_type
     if repo_url:
         kwargs["repo_url"] = repo_url
-    if username:
-        kwargs["username"] = username
-    if password:
-        kwargs["password"] = password
     return get_publisher(channel, **kwargs)
 
 
@@ -56,16 +50,6 @@ RepoTypeOption = typer.Option("generic", "--repo-type", help="仓库类型，默
 RepoUrlOption = typer.Option(
     None, "--repo-url", help="仓库地址，未传则按 repo-name/repo-type 从 funsecret 读取"
 )
-UsernameOption = typer.Option(
-    None,
-    "--username",
-    help="认证用户名，未传则按 repo-name/repo-type 从 funsecret 读取",
-)
-PasswordOption = typer.Option(
-    None, "--password", help="认证密码，未传则按 repo-name/repo-type 从 funsecret 读取"
-)
-
-
 @app.command()
 def upload(
     file: Path = typer.Argument(..., help="本地文件路径", exists=True, readable=True),
@@ -78,12 +62,10 @@ def upload(
     repo_name: str | None = RepoNameOption,
     repo_type: str = RepoTypeOption,
     repo_url: str | None = RepoUrlOption,
-    username: str | None = UsernameOption,
-    password: str | None = PasswordOption,
 ) -> None:
     """上传制品文件"""
     publisher = _build_publisher(
-        channel, repo_name, repo_type, repo_url, username, password
+        channel, repo_name, repo_type, repo_url
     )
     result = publisher.upload_file(
         filepath=str(file),
@@ -106,12 +88,10 @@ def download(
     repo_name: str | None = RepoNameOption,
     repo_type: str = RepoTypeOption,
     repo_url: str | None = RepoUrlOption,
-    username: str | None = UsernameOption,
-    password: str | None = PasswordOption,
 ) -> None:
     """下载制品文件"""
     publisher = _build_publisher(
-        channel, repo_name, repo_type, repo_url, username, password
+        channel, repo_name, repo_type, repo_url
     )
     if output.is_dir() or str(output).endswith(os.sep):
         publisher.download_file(
@@ -133,12 +113,10 @@ def sign_url(
     repo_name: str | None = RepoNameOption,
     repo_type: str = RepoTypeOption,
     repo_url: str | None = RepoUrlOption,
-    username: str | None = UsernameOption,
-    password: str | None = PasswordOption,
 ) -> None:
     """生成临时免密下载地址"""
     publisher = _build_publisher(
-        channel, repo_name, repo_type, repo_url, username, password
+        channel, repo_name, repo_type, repo_url
     )
     expiration = int((time.time() + expiration_seconds) * 1000)
     url = publisher.get_download_url(path=path, version=version, expiration=expiration)
