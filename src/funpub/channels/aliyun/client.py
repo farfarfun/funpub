@@ -149,7 +149,12 @@ class AliyunClient:
         dest_path: str,
         chunk_size: int = 8 * 1024 * 1024,
     ) -> None:
-        """下载文件到 dest_path"""
+        """下载文件到 dest_path。
+
+        此处保留渠道会话而不调用 funget：funpub 支持 Python 3.10+，当前
+        funget 要求 Python 3.12+；同时这里需要沿用 Aliyun API 的认证和
+        :meth:`_raise_for_status` 异常分类。
+        """
         with self._session.get(
             self._files_url(path), params={"version": version}, stream=True
         ) as resp:

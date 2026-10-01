@@ -81,6 +81,10 @@ url = publisher.get_download_url(path="path/to/app", version="1.0.0")
 - `funpub.channels`：渠道注册表，懒加载各渠道模块 —— `import funpub` 不会
   拉入任何渠道的第三方依赖，只有真正使用某个渠道时才会导入它。
 
+阿里云下载暂不使用组织通用下载包 `funget`：`funpub` 支持 Python 3.10+，
+而当前 `funget` 要求 Python 3.12+；此外渠道客户端需要复用认证会话，并将
+HTTP 状态转换为 `funpub` 的细分异常。待两者运行时与错误契约兼容后再迁移。
+
 ### 新增渠道
 
 1. 在 `src/funpub/channels/<name>/` 下实现一个 `BasePublisher` 子类。
