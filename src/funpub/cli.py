@@ -50,6 +50,8 @@ RepoTypeOption = typer.Option("generic", "--repo-type", help="仓库类型，默
 RepoUrlOption = typer.Option(
     None, "--repo-url", help="仓库地址，未传则按 repo-name/repo-type 从 funsecret 读取"
 )
+
+
 @app.command()
 def upload(
     file: Path = typer.Argument(..., help="本地文件路径", exists=True, readable=True),
@@ -63,10 +65,24 @@ def upload(
     repo_type: str = RepoTypeOption,
     repo_url: str | None = RepoUrlOption,
 ) -> None:
-    """上传制品文件"""
-    publisher = _build_publisher(
-        channel, repo_name, repo_type, repo_url
-    )
+    """上传制品文件。
+
+    Args:
+        file: 本地文件路径，必须存在且可读。
+        path: 远端制品路径。
+        version: 制品版本号。
+        channel: 发布渠道，默认 ``aliyun``。
+        filename: 制品名称，默认取本地文件名。
+        description: 版本描述。
+        overwrite: 是否覆盖已存在的同版本制品，默认不覆盖。
+        repo_name: 仓库名称，配合 repo_type 从 funsecret 读取仓库配置。
+        repo_type: 仓库类型，默认 ``generic``。
+        repo_url: 仓库地址，未传则按 repo_name/repo_type 从 funsecret 读取。
+
+    失败行为：目标版本已存在且未传 ``--overwrite``、本地文件不存在、或
+    渠道鉴权/网络失败时抛出异常并以非 0 退出码结束。
+    """
+    publisher = _build_publisher(channel, repo_name, repo_type, repo_url)
     result = publisher.upload_file(
         filepath=str(file),
         path=path,
@@ -89,10 +105,23 @@ def download(
     repo_type: str = RepoTypeOption,
     repo_url: str | None = RepoUrlOption,
 ) -> None:
-    """下载制品文件"""
-    publisher = _build_publisher(
-        channel, repo_name, repo_type, repo_url
-    )
+    """下载制品文件。
+
+    Args:
+        path: 远端制品路径。
+        version: 制品版本号。
+        output: 保存目录（以 ``/`` 结尾或已是目录）或完整文件路径，
+            默认当前目录。
+        channel: 发布渠道，默认 ``aliyun``。
+        overwrite: 是否覆盖已存在的本地文件，默认不覆盖。
+        repo_name: 仓库名称，配合 repo_type 从 funsecret 读取仓库配置。
+        repo_type: 仓库类型，默认 ``generic``。
+        repo_url: 仓库地址，未传则按 repo_name/repo_type 从 funsecret 读取。
+
+    失败行为：本地目标文件已存在且未传 ``--overwrite``、远端制品不存在、
+    或渠道鉴权/网络失败时抛出异常并以非 0 退出码结束。
+    """
+    publisher = _build_publisher(channel, repo_name, repo_type, repo_url)
     if output.is_dir() or str(output).endswith(os.sep):
         publisher.download_file(
             path=path, version=version, save_dir=str(output), overwrite=overwrite
@@ -114,10 +143,21 @@ def sign_url(
     repo_type: str = RepoTypeOption,
     repo_url: str | None = RepoUrlOption,
 ) -> None:
-    """生成临时免密下载地址"""
-    publisher = _build_publisher(
-        channel, repo_name, repo_type, repo_url
-    )
+    """生成临时免密下载地址。
+
+    Args:
+        path: 远端制品路径。
+        version: 制品版本号。
+        expiration_seconds: 链接从现在起的有效期（秒），默认 3600。
+        channel: 发布渠道，默认 ``aliyun``。
+        repo_name: 仓库名称，配合 repo_type 从 funsecret 读取仓库配置。
+        repo_type: 仓库类型，默认 ``generic``。
+        repo_url: 仓库地址，未传则按 repo_name/repo_type 从 funsecret 读取。
+
+    失败行为：远端制品不存在或渠道鉴权/网络失败时抛出异常并以非 0
+    退出码结束。
+    """
+    publisher = _build_publisher(channel, repo_name, repo_type, repo_url)
     expiration = int((time.time() + expiration_seconds) * 1000)
     url = publisher.get_download_url(path=path, version=version, expiration=expiration)
     typer.echo(url)

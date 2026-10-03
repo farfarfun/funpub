@@ -123,7 +123,23 @@ class AliyunClient:
         filename: str | None = None,
         description: str | None = None,
     ) -> dict[str, Any]:
-        """一次性上传整个文件，返回响应中的 ``object`` 字段"""
+        """一次性上传整个文件（适合小文件，大文件见 :meth:`chunked_upload`）。
+
+        Args:
+            filepath: 本地文件路径。
+            path: 远端制品路径（渠道内的"包名"）。
+            version: 制品版本号。
+            filename: 制品名称，默认取本地文件名。
+            description: 版本描述。
+
+        Returns:
+            响应中的 ``object`` 字段（远端返回的制品元信息，如 url/md5）。
+
+        Raises:
+            AuthenticationError: 认证失败（401）。
+            RemoteNotFoundError: 远端资源不存在（404）。
+            PublishError: 其他失败状态码，或响应标记 ``successful=False``。
+        """
         params: dict[str, str] = {"version": version}
         if filename:
             params["fileName"] = filename
@@ -154,6 +170,20 @@ class AliyunClient:
         此处保留渠道会话而不调用 funget：funpub 支持 Python 3.10+，当前
         funget 要求 Python 3.12+；同时这里需要沿用 Aliyun API 的认证和
         :meth:`_raise_for_status` 异常分类。
+
+        Args:
+            path: 远端制品路径。
+            version: 制品版本号。
+            dest_path: 本地目标文件路径，父目录需已存在。
+            chunk_size: 流式写入时每次读取的字节数，默认 8MB。
+
+        Returns:
+            None：下载成功即写完 ``dest_path``；失败时抛异常。
+
+        Raises:
+            AuthenticationError: 认证失败（401）。
+            RemoteNotFoundError: 远端制品不存在（404）。
+            PublishError: 其他失败状态码。
         """
         with self._session.get(
             self._files_url(path), params={"version": version}, stream=True
@@ -165,7 +195,19 @@ class AliyunClient:
                         f.write(chunk)
 
     def exist(self, path: str, version: str) -> bool:
-        """检查指定版本的制品是否存在"""
+        """检查指定版本的制品是否存在。
+
+        Args:
+            path: 远端制品路径。
+            version: 制品版本号。
+
+        Returns:
+            bool: 存在返回 ``True``，远端返回 404 返回 ``False``。
+
+        Raises:
+            AuthenticationError: 认证失败（401）。
+            PublishError: 除 404 外的其他失败状态码。
+        """
         resp = self._session.head(self._files_url(path), params={"version": version})
         if resp.status_code == 404:
             return False
@@ -173,7 +215,21 @@ class AliyunClient:
         return True
 
     def get_signed_download_url(self, path: str, version: str, expiration: int) -> str:
-        """获取临时免密下载地址，expiration 为毫秒级过期时间戳"""
+        """获取临时免密下载地址。
+
+        Args:
+            path: 远端制品路径。
+            version: 制品版本号。
+            expiration: 签名链接的过期时间，毫秒级 Unix 时间戳。
+
+        Returns:
+            str: 可直接访问的临时免密下载 URL。
+
+        Raises:
+            AuthenticationError: 认证失败（401）。
+            RemoteNotFoundError: 远端制品不存在（404）。
+            PublishError: 其他失败状态码，或响应缺少签名 URL 的 header。
+        """
         resp = self._session.head(
             self._files_url(path),
             params={"version": version, "signUrl": "true", "expiration": expiration},
@@ -199,7 +255,28 @@ class AliyunClient:
         poll_interval: float = DEFAULT_MERGE_POLL_INTERVAL,
         poll_timeout: float = DEFAULT_MERGE_TIMEOUT,
     ) -> dict[str, Any]:
-        """分块上传大文件：创建会话 -> 分块 PATCH -> 异步合并 -> 轮询 -> 关联仓库"""
+        """分块上传大文件：创建会话 -> 分块 PATCH -> 异步合并 -> 轮询 -> 关联仓库。
+
+        Args:
+            filepath: 本地文件路径。
+            path: 远端制品路径（渠道内的"包名"）。
+            version: 制品版本号。
+            filename: 制品名称，默认取本地文件名。
+            description: 版本描述。
+            chunk_size: 每个分块的字节数，默认 100MB。
+            poll_interval: 轮询合并状态的间隔（秒）。
+            poll_timeout: 轮询合并状态的总超时（秒），超时抛
+                :class:`~funpub.core.exceptions.MergeTimeoutError`。
+
+        Returns:
+            关联仓库接口返回的 ``object`` 字段（远端返回的制品元信息，如 md5）。
+
+        Raises:
+            PublishError: 创建会话/分块上传/异步合并/关联仓库任一步失败。
+            RemoteNotFoundError: 合并时查询的上传会话不存在（404）。
+            ChecksumMismatchError: 远端合并后的 md5 与本地计算值不一致。
+            MergeTimeoutError: 轮询合并状态超过 ``poll_timeout``。
+        """
         file_size = os.path.getsize(filepath)
         file_md5 = _file_md5(filepath)
         logger.info(f"开始分块上传 {filepath} ({file_size} bytes, md5={file_md5})")

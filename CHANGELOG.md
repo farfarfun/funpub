@@ -1,5 +1,19 @@
 # 更新日志
 
+## 0.1.6
+
+### 变更
+
+- 补齐并提交 `uv.lock`，保证依赖可复现构建（此前被 `.gitignore` 排除）。
+
+## 0.1.5
+
+### 新增
+
+- `AliyunClient` 支持专属域名格式的 `repo_url`
+  （`https://{组织标识}-{地域标识}.devops.aliyuncs.com/packages/api/protocol/{repo_type}/{repo}`），
+  与原有经典格式（`https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo}`）共存。
+
 ## 0.1.4
 
 ### 新增

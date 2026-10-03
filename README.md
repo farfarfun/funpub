@@ -49,15 +49,19 @@ CLI 不接受密码参数，认证信息统一通过 `funsecret` 按仓库名称
 ```python
 from funpub import get_publisher
 
-# 方式一：仓库信息已通过 funsecret 配置过，只需要传 repo_name
-publisher = get_publisher("aliyun", repo_name="{repo_name}")
+# 方式一（推荐）：仓库信息已通过 funsecret 配置过（见上面「命令行用法」
+# 里的 funsecret write 示例），只需要传 repo_name，无需在代码里出现凭据
+publisher = get_publisher("aliyun", repo_name="funpackage")
 
-# 方式二：在代码中直接传入配置（不适用于 CLI）
+# 方式二：测试/一次性脚本场景下，在代码中直接传入配置（不适用于 CLI；
+# username/password 不要写成字面量，应从环境变量或自建的 secret 存取读取）
+import os
+
 publisher = get_publisher(
     "aliyun",
-    repo_url="https://packages.aliyun.com/api/protocol/{org_id}/generic/{repo}",
-    username="...",
-    password="...",
+    repo_url=os.environ["FUNPUB_ALIYUN_REPO_URL"],
+    username=os.environ["FUNPUB_ALIYUN_USERNAME"],
+    password=os.environ["FUNPUB_ALIYUN_PASSWORD"],
 )
 
 # 文件大小超过 chunk_threshold（默认等于 chunk_size，100MB）会自动走分块上传
