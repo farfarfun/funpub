@@ -33,6 +33,7 @@ class ChannelSpec(NamedTuple):
 
     @property
     def install_hint(self) -> str:
+        """返回安装此渠道所需依赖的 pip 目标字符串。"""
         if self.pip_target:
             return self.pip_target
         if self.extra:
