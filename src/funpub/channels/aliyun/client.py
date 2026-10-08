@@ -100,12 +100,15 @@ class AliyunClient:
         )
 
     def close(self) -> None:
+        """关闭底层 HTTP 会话并释放连接资源。"""
         self._session.close()
 
     def __enter__(self) -> "AliyunClient":
+        """进入上下文管理器并返回当前客户端。"""
         return self
 
     def __exit__(self, *exc: Any) -> None:
+        """退出上下文管理器时关闭底层 HTTP 会话。"""
         self.close()
 
     # ------------------------------------------------------------------ #

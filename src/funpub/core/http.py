@@ -29,6 +29,17 @@ class TimeoutSession(requests.Session):
         self.timeout = timeout
 
     def request(self, method: str, url: str, **kwargs):  # type: ignore[override]
+        """发送 HTTP 请求，未传 ``timeout`` 时使用会话默认值。
+
+        Args:
+            method: HTTP 请求方法。
+            url: 请求地址。
+            **kwargs: 传给 :meth:`requests.Session.request` 的其余参数；其中
+                ``timeout`` 会覆盖会话默认超时。
+
+        Returns:
+            :class:`requests.Response` 响应对象。
+        """
         kwargs.setdefault("timeout", self.timeout)
         return super().request(method, url, **kwargs)
 
