@@ -3,7 +3,7 @@ name = "funpub"
 version = "0.1.6"
 description = "多渠道制品发布工具"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
@@ -47,7 +47,7 @@ packages = ["src/funpub"]
 
 [tool.ruff]
 src = ["src"]
-target-version = "py310"
+target-version = "py312"
 extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
