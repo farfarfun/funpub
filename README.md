@@ -34,12 +34,18 @@ funpub upload ./dist/app-1.0.0.tar.gz path/to/app \
 funpub download path/to/app --version 1.0.0 \
   --repo-name {repo_name} --output ./downloads/
 
+# 检查制品是否存在（存在退出码 0，不存在退出码 1）
+funpub exist path/to/app --version 1.0.0 --repo-name {repo_name}
+
 # 生成临时免密下载地址
 funpub sign-url path/to/app --version 1.0.0 \
   --repo-name {repo_name} --expiration-seconds 3600
 
 # 查看已注册的渠道
 funpub channels
+
+# 查看版本
+funpub --version
 ```
 
 CLI 不接受密码参数，认证信息统一通过 `funsecret` 按仓库名称读取，避免凭据进入 shell 历史和进程列表。

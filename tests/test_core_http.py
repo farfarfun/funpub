@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+import pytest
 import requests
 
 from funpub.core.http import DEFAULT_TIMEOUT, TimeoutSession, new_session
@@ -67,11 +68,49 @@ def test_timeout_session_respects_explicit_timeout(monkeypatch):
     assert captured["timeout"] == 1.0
 
 
+def test_timeout_session_falls_back_when_timeout_is_none(monkeypatch):
+    session = TimeoutSession(timeout=12.0)
+    captured = {}
+
+    def fake_request(self, method, url, **kwargs):
+        captured.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(requests.Session, "request", fake_request)
+
+    session.request("GET", "https://example.com", timeout=None)
+
+    assert captured["timeout"] == 12.0
+
+
+def test_new_session_accepts_tuple_timeout():
+    session = new_session(timeout=(3.0, 30.0))
+    assert session.timeout == (3.0, 30.0)
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"timeout": 0},
+        {"timeout": -1.0},
+        {"timeout": (3.0, 0.0)},
+        {"retries": -1},
+        {"backoff_factor": -0.5},
+        {"pool_size": 0},
+    ],
+)
+def test_new_session_rejects_invalid_parameters(kwargs):
+    with pytest.raises(ValueError):
+        new_session(**kwargs)
+
+
 def test_new_session_retry_config_only_retries_idempotent_methods():
     session = new_session(retries=2, pool_size=3)
     adapter = session.get_adapter("https://example.com")
+    assert isinstance(adapter, requests.adapters.HTTPAdapter)
     retry = adapter.max_retries
     assert retry.total == 2
+    assert retry.allowed_methods is not None
     assert "POST" not in retry.allowed_methods
     assert "GET" in retry.allowed_methods
 
@@ -79,4 +118,5 @@ def test_new_session_retry_config_only_retries_idempotent_methods():
 def test_new_session_zero_retries_disables_retry():
     session = new_session(retries=0)
     adapter = session.get_adapter("https://example.com")
+    assert isinstance(adapter, requests.adapters.HTTPAdapter)
     assert adapter.max_retries.total == 0

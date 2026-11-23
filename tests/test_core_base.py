@@ -100,12 +100,34 @@ def test_publish_result_setattr_writes_into_dict():
     assert result["custom"] == "value"
 
 
+def test_publish_result_delattr_removes_key_and_raises_for_missing():
+    result = PublishResult(path="a/b", version="1.0.0", custom="value")
+    del result.custom
+    assert "custom" not in result
+    with pytest.raises(AttributeError):
+        del result.custom
+
+
 def test_publish_result_repr_contains_key_fields():
     result = PublishResult(path="a/b", version="1.0.0", url="https://x")
     text = repr(result)
     assert "a/b" in text
     assert "1.0.0" in text
     assert "https://x" in text
+
+
+def test_base_publisher_context_manager_calls_close():
+    closed = False
+
+    class DummyPublisher(BasePublisher):
+        def close(self) -> None:
+            nonlocal closed
+            closed = True
+
+    with DummyPublisher() as pub:
+        assert isinstance(pub, DummyPublisher)
+        assert not closed
+    assert closed
 
 
 def test_base_publisher_methods_raise_not_implemented(tmp_path):

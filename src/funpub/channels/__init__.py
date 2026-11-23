@@ -13,6 +13,7 @@ funpub 发布渠道注册表
 import importlib
 from typing import Any, NamedTuple
 
+from funpub.core.base import BasePublisher
 from funpub.core.exceptions import ChannelNotFoundError
 
 
@@ -46,14 +47,14 @@ CHANNEL_SPECS: dict[str, ChannelSpec] = {
     "aliyun": ChannelSpec(".aliyun", "AliyunPublisher"),
 }
 
-_resolved: dict[str, type[Any]] = {}
+_resolved: dict[str, type[BasePublisher]] = {}
 
 
-def _load(spec: ChannelSpec) -> type[Any]:
+def _load(spec: ChannelSpec) -> type[BasePublisher]:
     """导入并返回渠道的 Publisher 类。
 
     Raises:
-        ImportError: 依赖缺失（带 pip 提示），或注册表类名有误（视为 bug）。
+        ImportError: 依赖缺失（带 pip 提示），或注册表类名/内部导入有误（视为 bug）。
     """
     cache_key = f"{spec.module}:{spec.cls}"
     if cache_key in _resolved:
@@ -61,8 +62,12 @@ def _load(spec: ChannelSpec) -> type[Any]:
 
     try:
         module = importlib.import_module(spec.module, __name__)
-    except ImportError as exc:
-        missing = getattr(exc, "name", None) or "?"
+    except ModuleNotFoundError as exc:
+        missing = exc.name or "?"
+        if missing == "funpub" or missing.startswith("funpub."):
+            raise ImportError(
+                f"funpub 内部错误：导入渠道模块 {spec.module!r} 失败，缺少内部模块 {missing!r}。"
+            ) from exc
         raise ImportError(
             f"渠道 {spec.cls} 的依赖 {missing!r} 未安装，"
             f"请运行: pip install {spec.install_hint}"
@@ -78,11 +83,18 @@ def _load(spec: ChannelSpec) -> type[Any]:
             f"请修正 funpub/channels/__init__.py 中的 CHANNEL_SPECS。"
         ) from exc
 
+    if not (
+        isinstance(publisher_cls, type) and issubclass(publisher_cls, BasePublisher)
+    ):
+        raise ImportError(
+            f"funpub 内部错误：模块 {spec.module} 中的 {spec.cls!r} 不是 BasePublisher 子类。"
+        )
+
     _resolved[cache_key] = publisher_cls
     return publisher_cls
 
 
-def get_publisher(channel: str, *args: Any, **kwargs: Any) -> Any:
+def get_publisher(channel: str, *args: Any, **kwargs: Any) -> BasePublisher:
     """
     根据渠道名称获取一个 Publisher 实例。
 
@@ -98,9 +110,9 @@ def get_publisher(channel: str, *args: Any, **kwargs: Any) -> Any:
         ImportError: 渠道依赖未安装
 
     Examples:
-        >>> publisher = get_publisher("aliyun", repo_url="...", username="...", password="...")
+        >>> publisher = get_publisher("aliyun", repo_name="funpackage")
     """
-    key = channel.lower()
+    key = channel.strip().lower()
     spec = CHANNEL_SPECS.get(key)
     if spec is None:
         available = ", ".join(sorted(CHANNEL_SPECS))
@@ -111,9 +123,9 @@ def get_publisher(channel: str, *args: Any, **kwargs: Any) -> Any:
     return _load(spec)(*args, **kwargs)
 
 
-def list_available_channels() -> dict[str, type[Any]]:
+def list_available_channels() -> dict[str, type[BasePublisher]]:
     """列出当前环境中依赖已装好、可以直接实例化的渠道"""
-    result: dict[str, type[Any]] = {}
+    result: dict[str, type[BasePublisher]] = {}
     for key, spec in CHANNEL_SPECS.items():
         try:
             result[key] = _load(spec)
@@ -134,9 +146,9 @@ def list_missing_channels() -> dict[str, str]:
 
 
 __all__ = [
+    "CHANNEL_SPECS",
+    "ChannelSpec",
     "get_publisher",
     "list_available_channels",
     "list_missing_channels",
-    "CHANNEL_SPECS",
-    "ChannelSpec",
 ]

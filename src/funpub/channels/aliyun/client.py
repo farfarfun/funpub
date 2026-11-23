@@ -11,6 +11,7 @@
 import hashlib
 import os
 import re
+import tempfile
 import time
 from base64 import b64encode
 from typing import Any
@@ -25,7 +26,7 @@ from funpub.core.exceptions import (
     PublishError,
     RemoteNotFoundError,
 )
-from funpub.core.http import new_session
+from funpub.core.http import TimeoutValue, new_session
 
 logger = getLogger("funpub.aliyun")
 
@@ -38,10 +39,10 @@ DEFAULT_MERGE_TIMEOUT = 20 * 60.0  # 秒
 # 2. 专属域名格式: https://{组织标识}-{地域标识}.devops.aliyuncs.com/packages/api/protocol/{repo_type}/{repo}
 #    专属域名格式下 URL 中不单独出现 org_id，blob 上传 API 的 org_id/repo_id 均取 repo 段。
 _REPO_URL_RE_CLASSIC = re.compile(
-    r"^https?://([^/]+)/api/protocol/([^/]+)/[^/]+/([^/?]+)"
+    r"^(https?)://([^/]+)/api/protocol/([^/]+)/[^/]+/([^/?#]+)$"
 )
 _REPO_URL_RE_DEVOPS = re.compile(
-    r"^https?://([^/]+\.devops\.aliyuncs\.com)/packages/api/protocol/[^/]+/([^/?]+)"
+    r"^(https?)://([^/]+\.devops\.aliyuncs\.com)/packages/api/protocol/[^/]+/([^/?#]+)$"
 )
 
 
@@ -69,7 +70,7 @@ class AliyunClient:
         repo_url: str,
         username: str,
         password: str,
-        timeout: float = 60.0,
+        timeout: TimeoutValue = 60.0,
     ) -> None:
         if not repo_url:
             raise PublishError("repo_url 不能为空")
@@ -78,14 +79,13 @@ class AliyunClient:
 
         self.repo_url = repo_url.rstrip("/")
         self.username = username
-        self.password = password
 
         classic_match = _REPO_URL_RE_CLASSIC.match(self.repo_url)
         devops_match = _REPO_URL_RE_DEVOPS.match(self.repo_url)
         if classic_match:
-            self.host, self.org_id, self.repo_id = classic_match.groups()
+            self.scheme, self.host, self.org_id, self.repo_id = classic_match.groups()
         elif devops_match:
-            self.host, self.repo_id = devops_match.groups()
+            self.scheme, self.host, self.repo_id = devops_match.groups()
             self.org_id = self.repo_id
         else:
             raise PublishError(
@@ -98,6 +98,9 @@ class AliyunClient:
             timeout=timeout,
             headers={"Authorization": _basic_auth_header(username, password)},
         )
+
+    def __repr__(self) -> str:
+        return f"AliyunClient(repo_url={self.repo_url!r}, username={self.username!r})"
 
     def close(self) -> None:
         """关闭底层 HTTP 会话并释放连接资源。"""
@@ -116,7 +119,10 @@ class AliyunClient:
     # ------------------------------------------------------------------ #
 
     def _files_url(self, path: str) -> str:
-        return f"{self.repo_url}/files/{quote(path.lstrip('/'))}"
+        clean = path.lstrip("/")
+        if not clean:
+            raise ValueError("远端制品路径 path 不能为空")
+        return f"{self.repo_url}/files/{quote(clean)}"
 
     def simple_upload(
         self,
@@ -159,7 +165,7 @@ class AliyunClient:
         payload = self._safe_json(resp)
         if not payload.get("successful", True):
             raise PublishError(f"上传失败: {payload}")
-        return payload.get("object", {})
+        return self._safe_object(payload)
 
     def download(
         self,
@@ -168,7 +174,7 @@ class AliyunClient:
         dest_path: str,
         chunk_size: int = 8 * 1024 * 1024,
     ) -> None:
-        """下载文件到 dest_path。
+        """下载文件到 dest_path（通过临时文件原子落盘，避免中断残留半成品）。
 
         此处保留渠道会话而不调用 funget：funpub 支持 Python 3.10+，当前
         funget 要求 Python 3.12+；同时这里需要沿用 Aliyun API 的认证和
@@ -181,21 +187,43 @@ class AliyunClient:
             chunk_size: 流式写入时每次读取的字节数，默认 8MB。
 
         Returns:
-            None：下载成功即写完 ``dest_path``；失败时抛异常。
+            None：下载成功即写完 ``dest_path``；失败时抛异常且不留残缺文件。
 
         Raises:
+            ValueError: ``chunk_size <= 0`` 或 ``path`` 为空。
             AuthenticationError: 认证失败（401）。
             RemoteNotFoundError: 远端制品不存在（404）。
             PublishError: 其他失败状态码。
         """
-        with self._session.get(
-            self._files_url(path), params={"version": version}, stream=True
-        ) as resp:
-            self._raise_for_status(resp, "下载")
-            with open(dest_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        f.write(chunk)
+        if chunk_size <= 0:
+            raise ValueError("chunk_size 必须大于 0")
+
+        parent_dir = os.path.dirname(dest_path) or "."
+        tmp_path: str | None = None
+        try:
+            with self._session.get(
+                self._files_url(path), params={"version": version}, stream=True
+            ) as resp:
+                self._raise_for_status(resp, "下载")
+                with tempfile.NamedTemporaryFile(
+                    mode="wb",
+                    dir=parent_dir,
+                    prefix=".funpub-",
+                    suffix=".part",
+                    delete=False,
+                ) as tmp_file:
+                    tmp_path = tmp_file.name
+                    for chunk in resp.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            tmp_file.write(chunk)
+            os.replace(tmp_path, dest_path)
+            tmp_path = None
+        finally:
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def exist(self, path: str, version: str) -> bool:
         """检查指定版本的制品是否存在。
@@ -233,10 +261,12 @@ class AliyunClient:
             RemoteNotFoundError: 远端制品不存在（404）。
             PublishError: 其他失败状态码，或响应缺少签名 URL 的 header。
         """
-        resp = self._session.head(
-            self._files_url(path),
-            params={"version": version, "signUrl": "true", "expiration": expiration},
-        )
+        params: dict[str, str | int] = {
+            "version": version,
+            "signUrl": "true",
+            "expiration": expiration,
+        }
+        resp = self._session.head(self._files_url(path), params=params)
         self._raise_for_status(resp, "生成免密下载地址")
         url = resp.headers.get("x-artlab-generic-sign-url")
         if not url:
@@ -275,11 +305,20 @@ class AliyunClient:
             关联仓库接口返回的 ``object`` 字段（远端返回的制品元信息，如 md5）。
 
         Raises:
+            ValueError: ``chunk_size``、``poll_interval`` 或 ``poll_timeout`` 参数非法。
+            AuthenticationError: 认证失败（401）。
             PublishError: 创建会话/分块上传/异步合并/关联仓库任一步失败。
-            RemoteNotFoundError: 合并时查询的上传会话不存在（404）。
+            RemoteNotFoundError: 合并时查询的上传会话不存在或远端路径不存在（404）。
             ChecksumMismatchError: 远端合并后的 md5 与本地计算值不一致。
             MergeTimeoutError: 轮询合并状态超过 ``poll_timeout``。
         """
+        if chunk_size <= 0:
+            raise ValueError("chunk_size 必须大于 0")
+        if poll_interval <= 0:
+            raise ValueError("poll_interval 必须大于 0")
+        if poll_timeout < 0:
+            raise ValueError("poll_timeout 不能小于 0")
+
         file_size = os.path.getsize(filepath)
         file_md5 = _file_md5(filepath)
         logger.info(f"开始分块上传 {filepath} ({file_size} bytes, md5={file_md5})")
@@ -292,7 +331,7 @@ class AliyunClient:
 
     def _blob_uploads_url(self, suffix: str = "") -> str:
         return (
-            f"https://{self.host}/api/external/repo/{self.org_id}"
+            f"{self.scheme}://{self.host}/api/external/repo/{self.org_id}"
             f"/GENERIC/repos/{self.repo_id}/blobs/uploads{suffix}"
         )
 
@@ -300,6 +339,8 @@ class AliyunClient:
         resp = self._session.post(
             self._blob_uploads_url(), headers={"Content-Length": "0"}
         )
+        if resp.status_code == 401:
+            raise AuthenticationError("创建分块上传会话失败: 认证失败(401)")
         if resp.status_code not in (201, 202):
             raise PublishError(
                 f"创建分块上传会话失败: {resp.status_code} {resp.text[:500]}"
@@ -309,7 +350,7 @@ class AliyunClient:
         if not location or not upload_uuid:
             raise PublishError("创建分块上传会话响应缺少 location/package-upload-uuid")
         if location.startswith("/"):
-            location = f"https://{self.host}{location}"
+            location = f"{self.scheme}://{self.host}{location}"
         return upload_uuid, location
 
     def _upload_chunks(
@@ -331,12 +372,17 @@ class AliyunClient:
                         "Content-Length": str(len(chunk)),
                     },
                 )
+                if resp.status_code == 401:
+                    raise AuthenticationError(
+                        f"分块上传失败 [{start}-{end}]: 认证失败(401)"
+                    )
                 if resp.status_code not in (200, 201, 202, 204):
                     raise PublishError(
                         f"分块上传失败 [{start}-{end}]: {resp.status_code} {resp.text[:500]}"
                     )
                 offset = end + 1
-                logger.info(f"已上传 {offset}/{file_size} bytes")
+                pct = offset * 100.0 / file_size
+                logger.info(f"已上传 {offset}/{file_size} bytes ({pct:.1f}%)")
 
     def _async_commit(self, upload_uuid: str, file_md5: str) -> None:
         resp = self._session.post(
@@ -344,6 +390,8 @@ class AliyunClient:
             params={"digest": f"md5:{file_md5}"},
             headers={"Content-Length": "0"},
         )
+        if resp.status_code == 401:
+            raise AuthenticationError("触发异步合并失败: 认证失败(401)")
         if resp.status_code != 202:
             raise PublishError(
                 f"触发异步合并失败: {resp.status_code} {resp.text[:500]}"
@@ -364,7 +412,7 @@ class AliyunClient:
             if resp.status_code == 200:
                 merged_md5 = resp.headers.get("x-blob-checksum-md5")
                 if not merged_md5:
-                    obj = self._safe_json(resp).get("object", {})
+                    obj = self._safe_object(self._safe_json(resp))
                     merged_md5 = obj.get("md5")
                 if merged_md5 and merged_md5.lower() != file_md5.lower():
                     raise ChecksumMismatchError(
@@ -373,16 +421,18 @@ class AliyunClient:
                 logger.info("分块合并完成")
                 return
             elif resp.status_code == 202:
-                status = (
-                    self._safe_json(resp).get("object", {}).get("status", "PENDING")
+                status = self._safe_object(self._safe_json(resp)).get(
+                    "status", "PENDING"
                 )
                 if status == "FAILED":
                     raise PublishError("分块合并失败")
+            elif resp.status_code == 401:
+                raise AuthenticationError("查询合并状态失败: 认证失败(401)")
             elif resp.status_code == 404:
                 raise RemoteNotFoundError("分块上传会话不存在")
             elif resp.status_code == 500:
-                obj = self._safe_json(resp)
-                message = obj.get("object", {}).get("errorMessage") or obj.get(
+                payload = self._safe_json(resp)
+                message = self._safe_object(payload).get("errorMessage") or payload.get(
                     "errorMessage"
                 )
                 raise PublishError(f"分块合并失败: {message or resp.text[:500]}")
@@ -391,9 +441,10 @@ class AliyunClient:
                     f"查询合并状态失败: {resp.status_code} {resp.text[:500]}"
                 )
 
-            if time.monotonic() > deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
                 raise MergeTimeoutError(f"分块合并轮询超时（{poll_timeout}s）")
-            time.sleep(poll_interval)
+            time.sleep(min(poll_interval, remaining))
 
     def _associate(
         self,
@@ -416,20 +467,31 @@ class AliyunClient:
                 "x-artlab-checksum-md5": file_md5,
             },
         )
+        if resp.status_code == 401:
+            raise AuthenticationError("关联制品到仓库失败: 认证失败(401)")
+        if resp.status_code == 404:
+            raise RemoteNotFoundError("关联制品到仓库失败: 远端制品不存在(404)")
         if resp.status_code not in (200, 201):
             raise PublishError(
                 f"关联制品到仓库失败: {resp.status_code} {resp.text[:500]}"
             )
         payload = self._safe_json(resp)
-        obj = payload.get("object") or {"fileMd5": file_md5}
-        return obj
+        if not payload.get("successful", True):
+            raise PublishError(f"关联制品到仓库失败: {payload}")
+        return self._safe_object(payload) or {"fileMd5": file_md5}
 
     @staticmethod
     def _safe_json(resp: Any) -> dict[str, Any]:
         try:
-            return resp.json()
+            data = resp.json()
         except ValueError:
             return {}
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _safe_object(payload: dict[str, Any]) -> dict[str, Any]:
+        obj = payload.get("object")
+        return obj if isinstance(obj, dict) else {}
 
     @staticmethod
     def _raise_for_status(resp: Any, action: str) -> None:

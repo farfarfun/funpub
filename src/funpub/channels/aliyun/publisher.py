@@ -13,7 +13,8 @@ from funpub.core.base import (
     ensure_parent_dir,
     get_filepath,
 )
-from funpub.core.exceptions import PublishError
+from funpub.core.exceptions import AuthenticationError, PublishError
+from funpub.core.http import TimeoutValue
 
 from .client import DEFAULT_CHUNK_SIZE, AliyunClient
 
@@ -69,11 +70,16 @@ class AliyunPublisher(BasePublisher):
         password: str | None = None,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
         chunk_threshold: int | None = None,
-        timeout: float = 60.0,
+        timeout: TimeoutValue = 60.0,
         *args: Any,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
+
+        if chunk_size <= 0:
+            raise ValueError("chunk_size 必须大于 0")
+        if chunk_threshold is not None and chunk_threshold < 0:
+            raise ValueError("chunk_threshold 不能小于 0")
 
         def _secret(field: str) -> str | None:
             if not repo_name:
@@ -96,9 +102,17 @@ class AliyunPublisher(BasePublisher):
                 "funsecret write {repo_url} funpub aliyun "
                 f"{repo_type} <repo_name> repo_url"
             )
+        if not username or not password:
+            target = repo_name or "<repo_name>"
+            raise AuthenticationError(
+                "缺少认证凭据 username/password，请通过参数传入或通过 funsecret 配置："
+                f"funsecret write {{value}} funpub aliyun {repo_type} {target} username|password"
+            )
 
         self.chunk_size = chunk_size
-        self.chunk_threshold = chunk_threshold or chunk_size
+        self.chunk_threshold = (
+            chunk_size if chunk_threshold is None else chunk_threshold
+        )
         self.client = AliyunClient(
             repo_url=repo_url, username=username, password=password, timeout=timeout
         )
@@ -112,6 +126,8 @@ class AliyunPublisher(BasePublisher):
         description: str | None = None,
         overwrite: bool = False,
         chunked: bool | None = None,
+        poll_interval: float | None = None,
+        poll_timeout: float | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> PublishResult:
@@ -135,14 +151,16 @@ class AliyunPublisher(BasePublisher):
             f"({'分块' if use_chunked else '简单'}上传, {file_size} bytes)"
         )
         if use_chunked:
-            obj = self.client.chunked_upload(
-                filepath,
-                path,
-                version,
-                filename=filename,
-                description=description,
-                chunk_size=self.chunk_size,
-            )
+            chunk_kwargs: dict[str, Any] = {
+                "filename": filename,
+                "description": description,
+                "chunk_size": self.chunk_size,
+            }
+            if poll_interval is not None:
+                chunk_kwargs["poll_interval"] = poll_interval
+            if poll_timeout is not None:
+                chunk_kwargs["poll_timeout"] = poll_timeout
+            obj = self.client.chunked_upload(filepath, path, version, **chunk_kwargs)
         else:
             obj = self.client.simple_upload(
                 filepath, path, version, filename=filename, description=description
@@ -173,9 +191,11 @@ class AliyunPublisher(BasePublisher):
         """下载制品到本地，目标已存在时默认拒绝覆盖。"""
         dest = get_filepath(
             filedir=save_dir,
-            filename=filename or os.path.basename(path),
+            filename=filename or os.path.basename(path.rstrip("/")),
             filepath=filepath,
         )
+        if os.path.isdir(dest):
+            raise IsADirectoryError(f"目标路径是目录，不能作为文件写入: {dest}")
         if os.path.exists(dest) and not overwrite:
             raise FileExistsError(f"{dest} 已存在，如需覆盖请传 overwrite=True")
         ensure_parent_dir(dest)
@@ -202,12 +222,6 @@ class AliyunPublisher(BasePublisher):
 
     def close(self) -> None:
         self.client.close()
-
-    def __enter__(self) -> "AliyunPublisher":
-        return self
-
-    def __exit__(self, *exc: Any) -> None:
-        self.close()
 
 
 __all__ = ["AliyunPublisher"]

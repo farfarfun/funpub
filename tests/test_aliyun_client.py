@@ -5,6 +5,8 @@ import pytest
 from funpub.channels.aliyun.client import AliyunClient
 from funpub.core.exceptions import (
     AuthenticationError,
+    ChecksumMismatchError,
+    MergeTimeoutError,
     PublishError,
     RemoteNotFoundError,
 )
@@ -155,3 +157,144 @@ def test_chunked_upload_flow(monkeypatch, tmp_path):
     obj = client.chunked_upload(str(filepath), "a/b", "1.0.0", chunk_size=4)
     assert obj["fileMd5"] == "known"
     assert session.patch.call_count == 3  # 4 + 4 + 2 bytes
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        f"{REPO_URL}/extra",
+        f"{REPO_URL}?foo=bar",
+        f"{DEVOPS_REPO_URL}/extra",
+    ],
+)
+def test_repo_url_rejects_trailing_segments_or_query(monkeypatch, bad_url):
+    monkeypatch.setattr(
+        "funpub.channels.aliyun.client.new_session", lambda **kwargs: MagicMock()
+    )
+    with pytest.raises(PublishError):
+        AliyunClient(repo_url=bad_url, username="u", password="p")
+
+
+def test_client_repr_does_not_leak_password(monkeypatch):
+    client = _client(monkeypatch, MagicMock())
+    text = repr(client)
+    assert "u" in text
+    assert "password" not in text.lower()
+
+
+def test_simple_upload_handles_unsuccessful_and_null_object(monkeypatch, tmp_path):
+    session = MagicMock()
+    client = _client(monkeypatch, session)
+    filepath = tmp_path / "a.txt"
+    filepath.write_bytes(b"data")
+
+    resp_fail = MagicMock(status_code=200)
+    resp_fail.json.return_value = {"successful": False, "errorMessage": "bad"}
+    session.post.return_value = resp_fail
+    with pytest.raises(PublishError):
+        client.simple_upload(str(filepath), "a/b", "1.0.0")
+
+    resp_null = MagicMock(status_code=200)
+    resp_null.json.return_value = {"successful": True, "object": None}
+    session.post.return_value = resp_null
+    assert client.simple_upload(str(filepath), "a/b", "1.0.0") == {}
+
+
+def test_download_cleans_up_temp_file_on_stream_error(monkeypatch, tmp_path):
+    session = MagicMock()
+    response = MagicMock(status_code=200)
+    response.__enter__.return_value = response
+
+    def broken_stream(chunk_size):
+        yield b"partial"
+        raise RuntimeError("network dropped")
+
+    response.iter_content.side_effect = broken_stream
+    session.get.return_value = response
+    client = _client(monkeypatch, session)
+
+    destination = tmp_path / "download.bin"
+    destination.write_bytes(b"original")
+
+    with pytest.raises(RuntimeError, match="network dropped"):
+        client.download("a/b", "1.0.0", str(destination))
+
+    # 原文件未被破坏，也没有残留 .part 临时文件
+    assert destination.read_bytes() == b"original"
+    assert list(tmp_path.glob("*.part")) == []
+
+
+def test_signed_url_missing_header_raises(monkeypatch):
+    session = MagicMock()
+    session.head.return_value = MagicMock(status_code=200, headers={})
+    client = _client(monkeypatch, session)
+
+    with pytest.raises(PublishError, match="x-artlab-generic-sign-url"):
+        client.get_signed_download_url("a/b", "1.0.0", 1234567890)
+
+
+def test_empty_remote_path_raises_value_error(monkeypatch):
+    client = _client(monkeypatch, MagicMock())
+    with pytest.raises(ValueError, match="path"):
+        client.exist("///", "1.0.0")
+
+
+def test_chunked_upload_401_raises_authentication_error(monkeypatch, tmp_path):
+    session = MagicMock()
+    session.post.return_value = MagicMock(status_code=401, text="unauthorized")
+    client = _client(monkeypatch, session)
+    filepath = tmp_path / "big.bin"
+    filepath.write_bytes(b"abcd")
+
+    with pytest.raises(AuthenticationError):
+        client.chunked_upload(str(filepath), "a/b", "1.0.0", chunk_size=2)
+
+
+def test_chunked_upload_merge_polling_checksum_and_timeout(monkeypatch, tmp_path):
+    session = MagicMock()
+    client = _client(monkeypatch, session)
+    monkeypatch.setattr("funpub.channels.aliyun.client.time.sleep", lambda _: None)
+
+    # 202 PENDING -> 200 checksum mismatch
+    pending = MagicMock(status_code=202)
+    pending.json.return_value = {"object": {"status": "PENDING"}}
+    mismatch = MagicMock(status_code=200, headers={"x-blob-checksum-md5": "wrong"})
+    session.get.side_effect = [pending, mismatch]
+    with pytest.raises(ChecksumMismatchError):
+        client._wait_for_merge("uid", "expected", poll_interval=0.1, poll_timeout=5.0)
+
+    # 202 FAILED
+    failed = MagicMock(status_code=202)
+    failed.json.return_value = {"object": {"status": "FAILED"}}
+    session.get.side_effect = [failed]
+    with pytest.raises(PublishError, match="合并失败"):
+        client._wait_for_merge("uid", "expected", poll_interval=0.1, poll_timeout=5.0)
+
+    # 404 session gone
+    session.get.side_effect = [MagicMock(status_code=404)]
+    with pytest.raises(RemoteNotFoundError):
+        client._wait_for_merge("uid", "expected", poll_interval=0.1, poll_timeout=5.0)
+
+    # 500 with object=None
+    err500 = MagicMock(status_code=500, text="server error")
+    err500.json.return_value = {"object": None, "errorMessage": "disk full"}
+    session.get.side_effect = [err500]
+    with pytest.raises(PublishError, match="disk full"):
+        client._wait_for_merge("uid", "expected", poll_interval=0.1, poll_timeout=5.0)
+
+    # timeout
+    session.get.side_effect = None
+    session.get.return_value = pending
+    with pytest.raises(MergeTimeoutError):
+        client._wait_for_merge("uid", "expected", poll_interval=0.1, poll_timeout=0.0)
+
+
+def test_associate_checks_successful_flag(monkeypatch):
+    session = MagicMock()
+    resp = MagicMock(status_code=200)
+    resp.json.return_value = {"successful": False, "errorMessage": "conflict"}
+    session.post.return_value = resp
+    client = _client(monkeypatch, session)
+
+    with pytest.raises(PublishError, match="关联制品到仓库失败"):
+        client._associate("a/b", "1.0.0", "b", None, "md5val")

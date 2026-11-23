@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from funpub.channels.aliyun.publisher import AliyunPublisher
-from funpub.core.exceptions import PublishError
+from funpub.core.exceptions import AuthenticationError, PublishError
 
 REPO_URL = "https://packages.aliyun.com/api/protocol/x/generic/y"
 
@@ -188,3 +188,77 @@ def test_missing_repo_url_and_repo_name_raises(monkeypatch):
 
     with pytest.raises(PublishError):
         AliyunPublisher(username="u", password="p")
+
+
+def test_missing_credentials_raise_authentication_error(monkeypatch):
+    monkeypatch.setattr(
+        "funpub.channels.aliyun.publisher.read_secret", lambda **kwargs: None
+    )
+    with pytest.raises(AuthenticationError, match="funsecret"):
+        AliyunPublisher(repo_url=REPO_URL, repo_name="myrepo")
+
+
+def test_chunk_threshold_zero_triggers_chunked_upload(monkeypatch, tmp_path):
+    client = MagicMock()
+    client.exist.return_value = False
+    client.chunked_upload.return_value = {"fileMd5": "m"}
+    monkeypatch.setattr(
+        "funpub.channels.aliyun.publisher.AliyunClient", lambda **kwargs: client
+    )
+    publisher = AliyunPublisher(
+        repo_url=REPO_URL,
+        username="u",
+        password="p",
+        chunk_size=1024,
+        chunk_threshold=0,
+    )
+
+    filepath = tmp_path / "tiny.bin"
+    filepath.write_bytes(b"a")
+
+    publisher.upload_file(
+        str(filepath), "a/b", "1.0.0", poll_interval=0.5, poll_timeout=10.0
+    )
+    assert publisher.chunk_threshold == 0
+    client.chunked_upload.assert_called_once_with(
+        str(filepath),
+        "a/b",
+        "1.0.0",
+        filename="tiny.bin",
+        description=None,
+        chunk_size=1024,
+        poll_interval=0.5,
+        poll_timeout=10.0,
+    )
+
+
+def test_invalid_chunk_params_raise_value_error(monkeypatch):
+    monkeypatch.setattr(
+        "funpub.channels.aliyun.publisher.AliyunClient", lambda **kwargs: MagicMock()
+    )
+    with pytest.raises(ValueError, match="chunk_size"):
+        AliyunPublisher(repo_url=REPO_URL, username="u", password="p", chunk_size=0)
+    with pytest.raises(ValueError, match="chunk_threshold"):
+        AliyunPublisher(
+            repo_url=REPO_URL, username="u", password="p", chunk_threshold=-1
+        )
+
+
+def test_download_file_handles_trailing_slash_and_directory_target(
+    monkeypatch, tmp_path
+):
+    client = MagicMock()
+    publisher = _publisher(monkeypatch, client)
+
+    assert publisher.download_file("a/b/", "1.0.0", save_dir=str(tmp_path)) is True
+    client.download.assert_called_once_with("a/b/", "1.0.0", str(tmp_path / "b"))
+
+    with pytest.raises(IsADirectoryError):
+        publisher.download_file("a/b", "1.0.0", filepath=str(tmp_path), overwrite=True)
+
+
+def test_publisher_context_manager_closes_client(monkeypatch):
+    client = MagicMock()
+    with _publisher(monkeypatch, client) as pub:
+        assert pub.client is client
+    client.close.assert_called_once_with()

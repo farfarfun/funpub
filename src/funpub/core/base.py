@@ -2,7 +2,9 @@
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
+
+_PublisherT = TypeVar("_PublisherT", bound="BasePublisher")
 
 
 def get_filepath(
@@ -26,7 +28,7 @@ def ensure_parent_dir(path: str) -> str:
     return path
 
 
-class PublishResult(dict):
+class PublishResult(dict[str, Any]):
     """
     一次上传操作的结果。继承自 dict，支持字典式和属性式访问。
 
@@ -70,6 +72,12 @@ class PublishResult(dict):
 
     def __setattr__(self, name: str, value: Any) -> None:
         self[name] = value
+
+    def __delattr__(self, name: str) -> None:
+        try:
+            del self[name]
+        except KeyError:
+            raise AttributeError(name) from None
 
     def __repr__(self) -> str:
         return (
@@ -145,3 +153,12 @@ class BasePublisher:
     ) -> str:
         """获取制品的（临时）下载地址"""
         raise NotImplementedError()
+
+    def close(self) -> None:
+        """释放底层资源（如 HTTP 连接池）。子类按需重写。"""
+
+    def __enter__(self: _PublisherT) -> _PublisherT:
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
