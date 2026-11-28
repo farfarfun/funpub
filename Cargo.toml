@@ -1,0 +1,46 @@
+# 纯虚拟工作区：根目录不再是一个 crate。三个 crate 全部在 crates/ 下，
+# 顶层 src/ 让给 Python 包（src layout）。Rust 看 crates/，Python 看 src/。
+[workspace]
+members = ["crates/funpub-core", "crates/funpub", "crates/funpub-py"]
+resolver = "2"
+
+[workspace.package]
+# crates/funpub-py（PyO3 扩展）和 crates/funpub（CLI 二进制）跟这个号走，
+# 与 pyproject.toml 保持同步。crates/funpub-core 维护独立的 0.x 版本线。
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/farfarfun/funpub"
+rust-version = "1.82"
+
+[workspace.dependencies]
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+env_logger = { version = "0.11", default-features = false, features = ["humantime"] }
+funpub-core = { path = "crates/funpub-core", version = "0.1.0" }
+funsecret-core = "0.2.1"
+log = "0.4"
+md-5 = "0.10"
+percent-encoding = "2"
+reqwest = { version = "0.12", default-features = false, features = [
+    "blocking",
+    "multipart",
+    "json",
+    "rustls-tls-webpki-roots",
+    "rustls-tls-native-roots",
+    "socks",
+    "http2",
+    "charset",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+sha2 = "0.10"
+tempfile = "3"
+thiserror = "2"
+url = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

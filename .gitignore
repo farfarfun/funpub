@@ -1,5 +1,9 @@
+/target
 __pycache__/
 *.pyc
+*.pyo
+*.so
+*.pyd
 *.egg-info
 *.db
 *.rar
@@ -7,6 +11,7 @@ build/
 dist/
 .cache
 .venv/
+.pytest_cache/
 logs/
 .run/
 .idea/

@@ -1,15 +1,43 @@
 # funpub
 
-多渠道制品发布工具。通过统一接口向不同的制品仓库上传/下载文件，当前支持：
+`funpub` 是多渠道制品发布工具。核心引擎采用 **Rust** 实现（`funpub-core`），直接通过 `funsecret-core` 读取本地加密仓库凭据，同时提供：
+
+- **原生 CLI 二进制**（`funpub`）：零 Python 依赖、纯 Rust TLS（rustls），通过 `apt` / `brew` / `cargo install` / GitHub Release 静态二进制分发；
+- **Python 扩展包**（PyPI `funpub`）：基于 PyO3 + maturin（`abi3-py312`）包装，**零运行时依赖**，完全兼容历史 Python API；
+- **Rust 核心库**（`funpub-core`）：发布于 crates.io，供 Rust 工具链与服务直接调用。
+
+当前支持的渠道：
 
 - **aliyun** — 阿里云 Packages generic 仓库（协议细节见 `docs/aliyun/generic/`）
 
-新渠道的接入方式见下方「新增渠道」。
-
 ## 安装
+
+### 命令行安装（原生静态二进制，零 Python 依赖）
+
+```bash
+# APT（添加 farfarfun 源后，见 https://farfarfun.github.io/packages/funpub/）
+sudo apt install funpub
+
+# Homebrew
+brew install farfarfun/packages/funpub
+
+# Cargo
+cargo install funpub
+
+# 或直接从 GitHub Releases 下载对应平台的静态二进制 / .deb
+```
+
+### Python 库安装（仅提供 Python API，零运行时依赖，不含命令行入口）
 
 ```bash
 pip install funpub
+```
+
+### Rust 核心库
+
+```toml
+[dependencies]
+funpub-core = "0.1"
 ```
 
 ## 命令行用法
@@ -82,31 +110,29 @@ publisher.download_file(path="path/to/app", version="1.0.0", save_dir="./downloa
 url = publisher.get_download_url(path="path/to/app", version="1.0.0")
 ```
 
-## 设计
+## 架构设计
 
-- `funpub.core.BasePublisher`：所有渠道实现的统一接口
-  （`upload_file` / `download_file` / `exist` / `get_download_url`）。
-- `funpub.core.PublishResult`：上传结果，字典 + 属性双重访问
-  （`path` / `version` / `url` / `size` / `md5` / `sha1` / `sha256`）。
-- `funpub.channels`：渠道注册表，懒加载各渠道模块 —— `import funpub` 不会
-  拉入任何渠道的第三方依赖，只有真正使用某个渠道时才会导入它。
+仓库采用与 `funget` / `funsecret` 一致的 3-crate 纯虚拟 Rust 工作区：
 
-阿里云下载暂不使用组织通用下载包 `funget`：`funpub` 支持 Python 3.10+，
-而当前 `funget` 要求 Python 3.12+；此外渠道客户端需要复用认证会话，并将
-HTTP 状态转换为 `funpub` 的细分异常。待两者运行时与错误契约兼容后再迁移。
-
-### 新增渠道
-
-1. 在 `src/funpub/channels/<name>/` 下实现一个 `BasePublisher` 子类。
-2. 在 `src/funpub/channels/__init__.py` 的 `CHANNEL_SPECS` 里注册一行
-   `ChannelSpec`。
+- `crates/funpub-core`：纯 Rust 核心库，实现 `Publisher`、`PublishResult`、`ChannelRegistry`、流式校验和、幂等重试 HTTP 客户端、阿里云 Generic 协议以及通过 `funsecret-core` 读取加密凭据。
+- `crates/funpub`：独立原生 CLI 二进制（`clap` + `env_logger`），支持 musl 静态构建。
+- `crates/funpub-py`：PyO3（`abi3-py312`）+ maturin 扩展模块 `_funpub`，不依赖 CLI crate，提供零依赖 Python API（`get_publisher` / `PublishResult` / `BasePublisher` / `AliyunPublisher` / `FunPubError` 异常族）。
+- `src/funpub/`：薄 Python 再导出层与 `.pyi` 类型存根，保持 `from funpub import ...`、`from funpub.core import ...`、`from funpub.channels import ...` 全部兼容。
 
 ## 开发
 
 ```bash
-uv sync
-uv run pytest
-uv run ruff check .
+# Rust 检查与测试
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace --exclude funpub-py
+
+# 构建原生 CLI
+cargo build --release --package funpub
+
+# 构建 Python 扩展并运行 pytest
+maturin build --release --out dist
+pytest
 ```
 
 ---

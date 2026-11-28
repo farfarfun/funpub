@@ -1,0 +1,29 @@
+[package]
+name = "funpub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Multi-channel artifact publishing CLI"
+readme = "README.md"
+keywords = ["artifact", "publish", "aliyun", "upload", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "funpub"
+path = "src/lib.rs"
+
+[[bin]]
+name = "funpub"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+env_logger.workspace = true
+funpub-core.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+funsecret-core.workspace = true
+tempfile.workspace = true

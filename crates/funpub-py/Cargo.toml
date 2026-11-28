@@ -1,0 +1,20 @@
+[package]
+name = "funpub-py"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version = "1.83"
+description = "funpub 的 Python 扩展模块"
+publish = false
+
+[lib]
+name = "_funpub"
+crate-type = ["cdylib"]
+
+[dependencies]
+# 刻意不依赖 ../funpub（CLI crate）：wheel 只提供 Python API，命令行走 apt / brew / cargo / Release。
+funpub-core.workspace = true
+pyo3 = { version = "0.29", features = ["extension-module"] }
+pyo3-log = "0.13"
+serde_json.workspace = true
